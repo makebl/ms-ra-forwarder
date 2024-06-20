@@ -72,28 +72,30 @@
             <p>如果出现 “Unsupported output format: XXX” 错误，表示不支持当前格式。</p>
           </div>
         </div>
+      </div>
 
-        <div class="row">
-          <div>
-            <label for="token" class="form-label">凭据（TOKEN）：</label>
-            <input name="token" class="form-control" type="text" value="">
-            <div class="form-text">如果没有设置 TOKEN 环境变量请留空。</div>
-          </div>
+      <div class="row">
+        <div>
+          <label for="token" class="form-label">凭据（TOKEN）：</label>
+          <input name="token" class="form-control" type="text" value="">
+          <div class="form-text">如果没有设置 TOKEN 环境变量请留空。</div>
         </div>
+      </div>
 
-        <div class="row">
-          <div class="col">
-            <label for="previewText" class="form-label">测试文本：</label>
-            <textarea name="previewText" class="form-control" rows="3" cols="">如果喜欢这个项目的话请点个 Star 吧。</textarea>
-          </div>
+      <div class="row">
+        <div class="col">
+          <label for="previewText" class="form-label">测试文本：</label>
+          <textarea name="previewText" class="form-control" rows="3">如果喜欢这个项目的话请点个 Star 吧。</textarea>
         </div>
-        <div style="height:20px"></div>
-        <div class="row">
-          <div class="col">
-            <button id="previewButton" type="button" class="btn btn-secondary" onclick="preview()">测试</button>
-            <button type="button" class="btn btn-primary" onclick='createLegadoUrl()'>生成阅读（legado）语音引擎链接</button>
-          </div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="row">
+        <div class="col">
+          <button id="previewButton" type="button" class="btn btn-secondary" onclick="preview()">测试</button>
+          <button type="button" class="btn btn-primary" onclick="generateAndDownloadAudio()">生成并下载音频</button>
+          <button type="button" class="btn btn-primary" onclick='createLegadoUrl()'>生成阅读（legado）语音引擎链接</button>
         </div>
+      </div>
     </form>
     <div style="height:50px"></div>
   </div>
@@ -119,6 +121,7 @@
       </div>
     </div>
   </div>
+
   <script async defer src="https://buttons.github.io/buttons.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
     integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p"
@@ -142,8 +145,8 @@
       });
 
     function refreshVoice() {
-      let voiceElelement = document.getElementsByName('voiceName')[0];
-      voiceElelement.innerHTMl = '';
+      let voiceElement = document.getElementsByName('voiceName')[0];
+      voiceElement.innerHTML = '';
       voices.forEach(item => {
         let option = document.createElement('option');
         option.value = item['ShortName'];
@@ -151,7 +154,7 @@
         if (item['ShortName'] == 'zh-CN-XiaoxiaoNeural') {
           option.selected = true;
         }
-        voiceElelement.append(option)
+        voiceElement.append(option);
       });
       updateConfigName();
     }
@@ -170,7 +173,7 @@
                   '+ text + '\
               </prosody >\
           </voice >\
-        </speak > '
+        </speak > ';
 
       return ssml;
     }
@@ -181,7 +184,7 @@
       let voiceFormat = document.getElementsByName('voiceFormat')[0].value;
       let token = document.getElementsByName('token')[0].value;
       let previewText = document.getElementsByName('previewText')[0].value;
-      let ssml = createSSML(previewText, voiceName)
+      let ssml = createSSML(previewText, voiceName);
       if (token) {
         headers['Authorization'] = 'Bearer ' + token;
       }
@@ -197,7 +200,7 @@
         body: ssml
       }).then(response => {
         if (response.status == 200) {
-          return response.arrayBuffer()
+          return response.arrayBuffer();
         } else if (response.status == 401) {
           throw '无效的密钥';
         } else {
@@ -218,6 +221,50 @@
         });
     }
 
+    function generateAndDownloadAudio() {
+      let headers = { 'Content-Type': 'text/plain' };
+      let voiceName = document.getElementsByName('voiceName')[0].value;
+      let voiceFormat = document.getElementsByName('voiceFormat')[0].value;
+      let token = document.getElementsByName('token')[0].value;
+      let previewText = document.getElementsByName('previewText')[0].value;
+      let ssml = createSSML(previewText, voiceName);
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+
+      headers['Format'] = voiceFormat;
+
+      fetch('/api/ra', {
+        method: 'post',
+        headers: headers,
+        body: ssml
+      }).then(response => {
+        if (response.status == 200) {
+          return response.blob();
+        } else if (response.status == 401) {
+          throw '无效的密钥';
+        } else {
+          return response.text().then(text => Promise.reject(text));
+        }
+      }).then(blob => {
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+        // Create a link element
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'generated_audio.webm'; // Set the filename
+        // Append the link to the body
+        document.body.appendChild(link);
+        // Click the link programatically
+        link.click();
+        // Clean up
+        link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }).catch(reason => {
+        alert(reason);
+      });
+    }
+
     function createLegadoUrl() {
       let name = document.getElementsByName('name')[0].value;
       let voiceName = document.getElementsByName('voiceName')[0].value;
@@ -230,7 +277,7 @@
         + '&voiceFormat=' + encodeURIComponent(voiceFormat)
         + '&token=' + encodeURIComponent(token);
       let svg = new QRCode(url).svg();
-      let modal = new bootstrap.Modal(document.getElementById('legadoUrlModal'))
+      let modal = new bootstrap.Modal(document.getElementById('legadoUrlModal'));
       modal.show();
       document.getElementById('legadoUrlQRCode').innerHTML = svg;
       document.getElementById('legadoUrl').value = url;
